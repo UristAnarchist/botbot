@@ -68,7 +68,7 @@ def convert(message: telebot.types.Message):
             if len(values) > 3:
                 raise ConvertionExeption('Слишком много элементов')
 
-            if len(values) < 3:
+            elif len(values) < 3:
                 raise ConvertionExeption('Не хватает элементов')
 
             quote, base, amount = values
