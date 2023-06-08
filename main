@@ -52,7 +52,7 @@ def values(message: telebot.types.Message):
 
 @bot.message_handler(commands=['fullvalues'])
 def fullvalues(message: telebot.types.Message):
-    text = 'Все оступные валюты для конвертации в рубли и друг в друга:'
+    text = 'Все доступные валюты для конвертации в рубли и друг в друга:'
     for key in all_keys.keys():
         text = '\n-'.join((text, key, ))
 
