@@ -1,0 +1,111 @@
+import telebot
+import requests
+import lxml.html
+from config import basic_keys, all_keys, TOKEN
+from extensions import ConvertionExeption, Convertor
+
+html = requests.get('https://cbr.ru/currency_base/daily/').content
+tree = lxml.html.document_fromstring(html)
+
+bot = telebot.TeleBot(TOKEN)
+
+def math_operation(quote, amount):
+    price = tree.xpath(f'/html/body/main/div/div/div/div[3]/div/table/tbody/tr[{all_keys[quote]}]/td[5]/text()')
+    div = tree.xpath(f'/html/body/main/div/div/div/div[3]/div/table/tbody/tr[{all_keys[quote]}]/td[3]/text()')
+    # удаление лишних знаков по краям переменной div
+    d = str(div)
+    D = d[2:-2]
+    # удаление лишних знаков по краям переменной price
+    a = str(price)
+    b = a[2:-2]
+
+    b = b.replace(',', '')  # удаление запятой из строки b для перевода переменной в число
+    s = int(b) / int(D)/10000  # деление на делитель и возврат плавающей точки
+    if s < 1:
+        V = round(s, 4) * int(amount)  # умножение на заданный пользователем множитель
+    else:
+        V = round(s, 3) * int(amount)
+    return V
+
+@bot.message_handler(commands=['start', 'help'])
+def send_welcome(message):
+    bot.reply_to(message, f"Приветсвую Вас, {message.chat.username}"
+                          f"\n\nДля того, чтобы узнать курс одной валюты в другой, "
+                          f"введите по очереди в строку:"
+                          f"\n-валюту"
+                          f"\n-валюту, в которую хотите конвертировать"
+                          f"\n-целое количество конвертируемой валюты "
+                          f"\n\nчерез пробел без запятых с маленькой буквы"
+                          f"\n(двойные названия следует вводить через нижнее подчеркивание)"
+                          f"\n\nНапример: доллар_сша рубль 3"
+                          f"\n\nПросмотр списка доспутных валют: /values")
+
+@bot.message_handler(commands=['values'])
+def values(message: telebot.types.Message):
+    text = 'Доступные валюты для конвертации в рубли и друг в друга:'
+    for key in basic_keys.keys():
+            text = '\n-'.join((text, key, ))
+
+    bot.reply_to(message, text)
+    bot.send_message(message.chat.id, 'Не нашли, что искали?'
+                          '\nОзнакомиться с полным списком валют: /fullvalues')
+
+@bot.message_handler(commands=['fullvalues'])
+def fullvalues(message: telebot.types.Message):
+    text = 'Все оступные валюты для конвертации в рубли и друг в друга:'
+    for key in all_keys.keys():
+        text = '\n-'.join((text, key, ))
+
+    bot.reply_to(message, text)
+
+@bot.message_handler(content_types=['text'])
+def convert(message: telebot.types.Message):
+    way = True
+    if way is True:
+        try:
+            values = message.text.split(' ')
+
+            if len(values) > 3:
+                raise ConvertionExeption('Слишком много элементов')
+
+            if len(values) < 3:
+                raise ConvertionExeption('Не хватает элементов')
+
+            quote, base, amount = values
+            values = Convertor.convert(quote, base, amount)
+        except ConvertionExeption as e:
+            bot.reply_to(message, f'Ошибка пользователя.\n{e}')
+            way = False
+        except Exception as e:
+            bot.reply_to(message,f'Не удалось обработать команду.\n{e}')
+            way = False
+
+    if way is True:
+        if str(base) == 'рубль' and str(quote) != 'рубль':
+            final_cost = math_operation(quote, amount)
+            bot.send_message(message.chat.id, f'{amount} {quote} в рубль - {round(final_cost, 2)}')
+        elif str(quote) == 'рубль' and str(base) != 'рубль':
+            final_cost = int(amount)/round(math_operation(base, 1), 3)
+            bot.send_message(message.chat.id, f'{amount} рубль в {base} - {round(final_cost, 4)}')
+        elif base == quote:
+            bot.send_message(message.chat.id, f'{quote} и есть {base} - {amount}')
+        else:
+            rub_cost_quote = math_operation(quote, amount)
+            rub_cost_base = math_operation(base, 1)
+            if rub_cost_quote/rub_cost_base < 1:
+                bot.send_message(message.chat.id, f'{quote} в {base} в количестве {amount} - {round(rub_cost_quote / rub_cost_base, 5)}')
+            else:
+                bot.send_message(message.chat.id, f'{quote} в {base} в количестве {amount} - {round(rub_cost_quote/rub_cost_base, 3)}')
+    else:
+        way = True
+        bot.send_message(message.chat.id, 'Введите запрос ещё раз')
+
+@bot.message_handler(content_types=['voice', 'audio', 'video'])
+def ear_reaction(message: telebot.types.Message):
+    bot.reply_to(message, 'Я великий глухой')
+
+@bot.message_handler(content_types=['photo', 'document', 'file', 'animation'])
+def eye_reaction(message: telebot.types.Message):
+    bot.reply_to(message, 'Я великий слепой')
+
+bot.polling(none_stop=True)
